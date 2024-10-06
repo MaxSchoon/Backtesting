@@ -11,7 +11,8 @@ class RSIAccumulationStrategy(bt.Strategy):
 
     def __init__(self):
         self.last_month = None
-        self.accumulated_cash = 0
+        self.total_invested = 0
+        self.accumulated_cash = 0  # Initialize accumulated_cash
         self.rsi = bt.indicators.RSI(self.data.close, period=self.params.rsi_period)
 
     def start(self):
@@ -25,6 +26,7 @@ class RSIAccumulationStrategy(bt.Strategy):
             self.last_month = current_month
             self.broker.add_cash(500)
             self.accumulated_cash += 500
+            self.total_invested += 500
             print(f"Added $500 to cash balance on {self.data.datetime.date(0)}")
         elif current_month != self.last_month:
             # New month has started
@@ -46,7 +48,7 @@ class RSIAccumulationStrategy(bt.Strategy):
                 print(f"Not enough cash to buy shares on {self.data.datetime.date(0)}")
 
     def stop(self):
-        # Report final accumulated cash
+        print(f"Total amount invested: ${self.total_invested:.2f}")
         print(f"Final accumulated cash not invested: ${self.accumulated_cash:.2f}")
 
 # Function to fetch data
@@ -85,10 +87,8 @@ def run_strategy():
     print("\n=== RSI Accumulation Strategy Performance ===")
     print(f"Final Portfolio Value: ${final_value:.2f}")
     # Calculate the total amount invested over the period
-    start_date = data.datetime.date(0)
-    end_date = data.datetime.date(-1)
-    total_months = (end_date.year - start_date.year) * 12 + end_date.month - start_date.month + 1
-    total_invested = 10000 + total_months * 500
+    total_months = (data.datetime.date(-1).year - data.datetime.date(0).year) * 12 + (data.datetime.date(-1).month - data.datetime.date(0).month)
+    total_invested = 10000 + ((total_months + 1) * 500)  # Include the initial month
 
     print(f"Net Profit: ${final_value - total_invested:.2f}")
     print(f"Maximum Drawdown: {analyzers.drawdown.get_analysis()['max']['drawdown']:.2f}%")
