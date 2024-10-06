@@ -84,7 +84,13 @@ def run_strategy():
     # Print performance metrics
     print("\n=== RSI Accumulation Strategy Performance ===")
     print(f"Final Portfolio Value: ${final_value:.2f}")
-    print(f"Net Profit: ${final_value - 10000:.2f}")
+    # Calculate the total amount invested over the period
+    start_date = data.datetime.date(0)
+    end_date = data.datetime.date(-1)
+    total_months = (end_date.year - start_date.year) * 12 + end_date.month - start_date.month + 1
+    total_invested = 10000 + total_months * 500
+
+    print(f"Net Profit: ${final_value - total_invested:.2f}")
     print(f"Maximum Drawdown: {analyzers.drawdown.get_analysis()['max']['drawdown']:.2f}%")
     print(f"Sharpe Ratio: {analyzers.sharpe.get_analysis().get('sharperatio', 0):.2f}")
     print(f"Trade Analysis: {analyzers.trade_analyzer.get_analysis()}")
