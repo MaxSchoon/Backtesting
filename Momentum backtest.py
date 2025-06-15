@@ -2,7 +2,7 @@ import yfinance as yf
 import backtrader as bt
 from datetime import timedelta
 
-# Define the Benchmark Strategy with RSI-Based Investing
+# Define the RSI Accumulation Strategy with RSI-Based Investing
 class RSIAccumulationStrategy(bt.Strategy):
     params = (
         ('rsi_period', 14),    # RSI period
