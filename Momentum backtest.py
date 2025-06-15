@@ -32,18 +32,20 @@ class RSIAccumulationStrategy(bt.Strategy):
             # New month has started
             self.broker.add_cash(500)
             self.accumulated_cash += 500
+            self.total_invested += 500
             print(f"Added $500 to cash balance on {self.data.datetime.date(0)}")
             self.last_month = current_month
 
         # Invest accumulated cash when RSI is below threshold (25)
         if self.rsi[0] < self.params.rsi_threshold and self.accumulated_cash > 0:
-            cash = self.broker.get_cash()
-            size = int(cash / self.data.close[0])
+            size = int(self.accumulated_cash / self.data.close[0])
             if size > 0:
                 self.buy(size=size)
                 invested_amount = size * self.data.close[0]
-                self.accumulated_cash = cash - invested_amount  # Update accumulated cash
-                print(f"RSI below {self.params.rsi_threshold}: Invested ${invested_amount:.2f} on {self.data.datetime.date(0)}")
+                self.accumulated_cash -= invested_amount  # Update accumulated cash
+                print(
+                    f"RSI below {self.params.rsi_threshold}: Invested ${invested_amount:.2f} on {self.data.datetime.date(0)}"
+                )
             else:
                 print(f"Not enough cash to buy shares on {self.data.datetime.date(0)}")
 
