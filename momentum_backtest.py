@@ -5,7 +5,13 @@ from datetime import timedelta
 
 # Define the Benchmark Strategy with RSI-Based Investing
 
+
+from datetime import timedelta
+
+# Define the Benchmark Strategy with RSI-Based Investing
+
 # Define the RSI Accumulation Strategy with RSI-Based Investing
+
 
 class RSIAccumulationStrategy(bt.Strategy):
     params = (
@@ -38,7 +44,9 @@ class RSIAccumulationStrategy(bt.Strategy):
             self.accumulated_cash += 500
 
 
+
             self.total_invested += 500
+
 
             print(f"Added $500 to cash balance on {self.data.datetime.date(0)}")
             self.last_month = current_month
@@ -54,6 +62,7 @@ class RSIAccumulationStrategy(bt.Strategy):
                 self.accumulated_cash = cash - invested_amount  # Update accumulated cash
                 print(f"RSI below {self.params.rsi_threshold}: Invested ${invested_amount:.2f} on {self.data.datetime.date(0)}")
 
+
             size = int(self.accumulated_cash / self.data.close[0])
             if size > 0:
                 self.buy(size=size)
@@ -62,6 +71,7 @@ class RSIAccumulationStrategy(bt.Strategy):
                 print(
                     f"RSI below {self.params.rsi_threshold}: Invested ${invested_amount:.2f} on {self.data.datetime.date(0)}"
                 )
+
 
             else:
                 print(f"Not enough cash to buy shares on {self.data.datetime.date(0)}")
