@@ -16,14 +16,11 @@ def compute_rsi(series, period=2):
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
-# Dynamically load the strategy from the main script which contains spaces in its name
-MODULE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Momentum backtest.py")
-_spec = importlib.util.spec_from_file_location("momentum_backtest", MODULE_PATH)
-_mod = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_mod)
+# Import strategy from project root
 import sys
-sys.modules[_spec.name] = _mod
-RSIAccumulationStrategy = _mod.RSIAccumulationStrategy
+ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
+sys.path.insert(0, ROOT_DIR)
+from momentum_backtest import RSIAccumulationStrategy
 
 class RecordBuyStrategy(RSIAccumulationStrategy):
     """Subclass that records buy dates for assertions."""

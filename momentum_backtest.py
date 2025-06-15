@@ -1,9 +1,13 @@
 import yfinance as yf
 import backtrader as bt
 
+import pandas as pd
+
+
 from datetime import timedelta
 
 # Define the Benchmark Strategy with RSI-Based Investing
+
 
 
 from datetime import timedelta
@@ -82,9 +86,22 @@ class RSIAccumulationStrategy(bt.Strategy):
 
 # Function to fetch data
 def get_yahoo_data(symbol, start_date, end_date):
-    data = yf.download(symbol, interval='1d', start=start_date, end=end_date)
+    """Fetch data from Yahoo Finance and sanitize column names."""
+    data = yf.download(
+        symbol,
+        interval="1d",
+        start=start_date,
+        end=end_date,
+        auto_adjust=False,
+        group_by="column",
+    )
     data.dropna(inplace=True)  # Remove rows with NaN values
-    data = data[data['Close'] > 0]  # Remove rows with zero prices
+    data = data[data["Close"] > 0]  # Remove rows with zero prices
+
+    # If yfinance returns a MultiIndex, flatten to single level
+    if isinstance(data.columns, pd.MultiIndex):
+        data.columns = data.columns.get_level_values(0)
+
     return bt.feeds.PandasData(dataname=data)
 
 # Main function to run the strategy
