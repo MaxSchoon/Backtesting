@@ -1,0 +1,79 @@
+# ---- OS / Editor ----
+.DS_Store
+.idea/
+.vscode/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual envs
+.venv/
+venv/
+ENV/
+env/
+.python-version
+
+# Packaging
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Unit test / coverage
+.pytest_cache/
+cover/
+htmlcov/
+.coverage
+.coverage.*
+*.cover
+*.py,cover
+coverage.xml
+nosetests.xml
+
+# Type checkers / linters / tooling
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.pyre/
+.nox/
+.tox/
+.cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs / local files
+logs/
+debug.log
+
+# Django/Flask/etc
+instance/
+local_settings.py
+db.sqlite3
+
+# Poetry / PDM
+poetry.lock
+.pdm/
+
+# Project-specific
+/backtesting/cache/
+/cache/
+
+
