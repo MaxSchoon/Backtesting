@@ -1,4 +1,11 @@
 import streamlit as st
+from typing import Any
+
+# Optional HTTP cache for yfinance requests
+try:  # noqa: SIM105
+    import requests_cache  # type: ignore[import-not-found]
+except Exception:  # pragma: no cover
+    requests_cache = None  # type: Any
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
@@ -26,6 +33,14 @@ def main():
         layout="wide",
         initial_sidebar_state="expanded"
     )
+    
+    # Initialize persistent UI state
+    if 'chart_data' not in st.session_state:
+        st.session_state['chart_data'] = None
+    if 'has_run_backtest' not in st.session_state:
+        st.session_state['has_run_backtest'] = False
+    if 'show_detailed_chart' not in st.session_state:
+        st.session_state['show_detailed_chart'] = False
     
     # Custom CSS for better styling
     st.markdown("""
@@ -73,6 +88,17 @@ def main():
     </style>
     """, unsafe_allow_html=True)
     
+    # Set up HTTP caching to reduce repeated calls to Yahoo Finance
+    if requests_cache is not None:
+        try:
+            requests_cache.install_cache(
+                cache_name='yfinance_cache',
+                backend='sqlite',
+                expire_after=3600,  # 1 hour
+            )
+        except Exception:
+            pass
+
     # Header
     st.markdown('<h1 class="main-header">📈 Investment Strategy Backtester</h1>', unsafe_allow_html=True)
     st.markdown("### Test different investment strategies with historical data")
@@ -179,19 +205,33 @@ def main():
         # Date range
         st.subheader("Date Range")
         default_start, default_end = DataManager.get_default_date_range()
-        
+
+        # Initialize session defaults for date inputs (versioned keys + version flag)
+        if st.session_state.get('date_defaults_version') != '3y_v1':
+            st.session_state['start_date_input_v2'] = pd.to_datetime(default_start).date()
+            st.session_state['end_date_input_v2'] = pd.to_datetime(default_end).date()
+            st.session_state['date_defaults_version'] = '3y_v1'
+
+        # Reset to last 3 years button
+        if st.button("↩️ Reset to last 3 years"):
+            st.session_state['start_date_input_v2'] = pd.to_datetime(default_start).date()
+            st.session_state['end_date_input_v2'] = pd.to_datetime(default_end).date()
+            st.rerun()
+
         start_date = st.date_input(
             "Start Date",
-            value=pd.to_datetime(default_start).date(),
+            value=st.session_state['start_date_input_v2'],
             min_value=pd.to_datetime('1990-01-01').date(),
-            max_value=datetime.now().date()
+            max_value=datetime.now().date(),
+            key="start_date_input_v2"
         )
         
         end_date = st.date_input(
             "End Date",
-            value=pd.to_datetime(default_end).date(),
+            value=st.session_state['end_date_input_v2'],
             min_value=pd.to_datetime('1990-01-01').date(),
-            max_value=datetime.now().date()
+            max_value=datetime.now().date(),
+            key="end_date_input_v2"
         )
         
         # Cache information
@@ -235,6 +275,12 @@ def main():
                     strategy_params=strategy_params if 'strategy_params' in locals() else None
                 )
             
+            # Persist chart data and flags for subsequent interactions
+            st.session_state['chart_data'] = engine.get_chart_data()
+            st.session_state['has_run_backtest'] = True
+            # Reset chart visibility on a fresh run to avoid confusion
+            st.session_state['show_detailed_chart'] = False
+
             # Display results with ticker information
             if 'data_source' in metrics and metrics['data_source'] == 'mock':
                 st.warning("⚠️ **Demo Mode Active** - Using simulated data due to API rate limits or data availability issues. Results are for demonstration purposes only.")
@@ -316,173 +362,103 @@ def main():
                 st.markdown(f"<li style='color: #ffffff;'>Win Rate: {metrics['win_rate_pct']:.1f}%</li>", unsafe_allow_html=True)
                 st.markdown("</ul></div>", unsafe_allow_html=True)
             
-            # Strategy comparison
-            st.subheader(f"🔄 Strategy Comparison for {selected_ticker}")
-            st.info(f"Compare this strategy with a simple buy-and-hold approach for {selected_ticker}")
-            
-            # Run buy-and-hold comparison
-            try:
-                with st.spinner("Running comparison..."):
-                    buy_hold_metrics = engine.run_backtest(
-                        symbol=selected_ticker,
-                        start_date=start_date.strftime('%Y-%m-%d'),
-                        end_date=end_date.strftime('%Y-%m-%d'),
-                        strategy_name='dca',
-                        initial_cash=initial_cash,
-                        investment_amount=investment_amount,
-                        investment_freq=investment_freq
-                    )
-                
-                # Create 2x2 grid of comparison charts
-                
-                # 1. Final Value Comparison (in dollars)
-                final_value_data = pd.DataFrame({
-                    'Strategy': ['Selected Strategy', 'Buy & Hold'],
-                    'Final Value ($)': [
-                        float(metrics['final_value']),
-                        float(buy_hold_metrics['final_value'])
-                    ]
-                })
-                
-                fig_final_value = go.Figure()
-                fig_final_value.add_trace(go.Bar(
-                    x=final_value_data['Strategy'],
-                    y=final_value_data['Final Value ($)'],
-                    marker_color=['#1f77b4', '#ff7f0e']
-                ))
-                
-                fig_final_value.update_layout(
-                    title=f"Final Portfolio Value - {selected_ticker}",
-                    yaxis_title="Final Value ($)",
-                    height=350
-                )
-                
-                # 2. Total Return Comparison
-                fig_total_return = go.Figure()
-                fig_total_return.add_trace(go.Bar(
-                    x=['Selected Strategy', 'Buy & Hold'],
-                    y=[float(metrics['total_return_pct']), float(buy_hold_metrics['total_return_pct'])],
-                    marker_color=['#1f77b4', '#ff7f0e']
-                ))
-                
-                fig_total_return.update_layout(
-                    title=f"Total Return (%) - {selected_ticker}",
-                    yaxis_title="Return (%)",
-                    height=350
-                )
-                
-                # 3. Max Drawdown Comparison
-                fig_drawdown = go.Figure()
-                fig_drawdown.add_trace(go.Bar(
-                    x=['Selected Strategy', 'Buy & Hold'],
-                    y=[float(metrics['max_drawdown_pct']), float(buy_hold_metrics['max_drawdown_pct'])],
-                    marker_color=['#1f77b4', '#ff7f0e']
-                ))
-                
-                fig_drawdown.update_layout(
-                    title=f"Maximum Drawdown (%) - {selected_ticker}",
-                    yaxis_title="Drawdown (%)",
-                    height=350
-                )
-                
-                # 4. Sharpe Ratio Comparison
-                fig_sharpe = go.Figure()
-                fig_sharpe.add_trace(go.Bar(
-                    x=['Selected Strategy', 'Buy & Hold'],
-                    y=[float(metrics['sharpe_ratio']), float(buy_hold_metrics['sharpe_ratio'])],
-                    marker_color=['#1f77b4', '#ff7f0e']
-                ))
-                
-                fig_sharpe.update_layout(
-                    title=f"Sharpe Ratio - {selected_ticker}",
-                    yaxis_title="Sharpe Ratio",
-                    height=350
-                )
-                
-                # Display charts in 2x2 grid
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.plotly_chart(fig_final_value, use_container_width=True)
-                    st.plotly_chart(fig_drawdown, use_container_width=True)
-                
-                with col2:
-                    st.plotly_chart(fig_total_return, use_container_width=True)
-                    st.plotly_chart(fig_sharpe, use_container_width=True)
-                
-            except Exception as e:
-                st.warning(f"Could not run comparison: {str(e)}")
-                st.info("Comparison requires both strategies to run successfully. Try adjusting your parameters.")
-            
-            # Plot results
-            st.subheader(f"📈 Performance Chart for {selected_ticker}")
-            st.info(f"Click the button below to view the detailed backtest chart for {selected_ticker}")
-            
-            if st.button("Show Detailed Chart"):
+            # Strategy comparison (skip extra backtest if using mock data to avoid repeated API hits)
+            if not ('data_source' in metrics and metrics['data_source'] == 'mock'):
+                st.subheader(f"🔄 Strategy Comparison for {selected_ticker}")
+                st.info(f"Compare this strategy with a simple buy-and-hold approach for {selected_ticker}")
                 try:
-                    # Get the chart data from the engine
-                    chart_data = engine.get_chart_data()
-                    
-                    if chart_data and chart_data['dates'] and chart_data['portfolio_values']:
-                        # Create a detailed portfolio performance chart
-                        fig = go.Figure()
-                        
-                        # Add portfolio value line
-                        fig.add_trace(go.Scatter(
-                            x=chart_data['dates'],
-                            y=chart_data['portfolio_values'],
-                            mode='lines',
-                            name='Portfolio Value',
-                            line=dict(color='#1f77b4', width=2)
-                        ))
-                        
-                        # Add initial investment line for reference
-                        initial_value = chart_data['portfolio_values'][0] if chart_data['portfolio_values'] else initial_cash
-                        fig.add_hline(
-                            y=initial_value,
-                            line_dash="dash",
-                            line_color="gray",
-                            annotation_text="Initial Investment",
-                            annotation_position="bottom right"
+                    with st.spinner("Running comparison..."):
+                        buy_hold_metrics = engine.run_backtest(
+                            symbol=selected_ticker,
+                            start_date=start_date.strftime('%Y-%m-%d'),
+                            end_date=end_date.strftime('%Y-%m-%d'),
+                            strategy_name='dca',
+                            initial_cash=initial_cash,
+                            investment_amount=investment_amount,
+                            investment_freq=investment_freq
                         )
-                        
-                        # Update layout
-                        fig.update_layout(
-                            title=f"Portfolio Performance Over Time - {selected_ticker}",
-                            xaxis_title="Date",
-                            yaxis_title="Portfolio Value ($)",
-                            height=500,
-                            showlegend=True,
-                            hovermode='x unified'
-                        )
-                        
-                        # Display the chart
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Show additional statistics
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            if len(chart_data['portfolio_values']) > 1:
-                                max_value = max(chart_data['portfolio_values'])
-                                st.metric("Peak Portfolio Value", f"${max_value:,.2f}")
-                        
-                        with col2:
-                            if len(chart_data['portfolio_values']) > 1:
-                                min_value = min(chart_data['portfolio_values'])
-                                st.metric("Lowest Portfolio Value", f"${min_value:,.2f}")
-                        
-                        with col3:
-                            if len(chart_data['portfolio_values']) > 1:
-                                final_value = chart_data['portfolio_values'][-1]
-                                st.metric("Final Portfolio Value", f"${final_value:,.2f}")
-                        
-                    else:
-                        st.warning("No portfolio data available for charting. Try running a backtest first.")
-                        
+
+                    # Create 2x2 grid of comparison charts
+                    # 1. Final Value Comparison (in dollars)
+                    final_value_data = pd.DataFrame({
+                        'Strategy': ['Selected Strategy', 'Buy & Hold'],
+                        'Final Value ($)': [
+                            float(metrics['final_value']),
+                            float(buy_hold_metrics['final_value'])
+                        ]
+                    })
+
+                    fig_final_value = go.Figure()
+                    fig_final_value.add_trace(go.Bar(
+                        x=final_value_data['Strategy'],
+                        y=final_value_data['Final Value ($)'],
+                        marker_color=['#1f77b4', '#ff7f0e']
+                    ))
+
+                    fig_final_value.update_layout(
+                        title=f"Final Portfolio Value - {selected_ticker}",
+                        yaxis_title="Final Value ($)",
+                        height=350
+                    )
+
+                    # 2. Total Return Comparison
+                    fig_total_return = go.Figure()
+                    fig_total_return.add_trace(go.Bar(
+                        x=['Selected Strategy', 'Buy & Hold'],
+                        y=[float(metrics['total_return_pct']), float(buy_hold_metrics['total_return_pct'])],
+                        marker_color=['#1f77b4', '#ff7f0e']
+                    ))
+
+                    fig_total_return.update_layout(
+                        title=f"Total Return (%) - {selected_ticker}",
+                        yaxis_title="Return (%)",
+                        height=350
+                    )
+
+                    # 3. Max Drawdown Comparison
+                    fig_drawdown = go.Figure()
+                    fig_drawdown.add_trace(go.Bar(
+                        x=['Selected Strategy', 'Buy & Hold'],
+                        y=[float(metrics['max_drawdown_pct']), float(buy_hold_metrics['max_drawdown_pct'])],
+                        marker_color=['#1f77b4', '#ff7f0e']
+                    ))
+
+                    fig_drawdown.update_layout(
+                        title=f"Maximum Drawdown (%) - {selected_ticker}",
+                        yaxis_title="Drawdown (%)",
+                        height=350
+                    )
+
+                    # 4. Sharpe Ratio Comparison
+                    fig_sharpe = go.Figure()
+                    fig_sharpe.add_trace(go.Bar(
+                        x=['Selected Strategy', 'Buy & Hold'],
+                        y=[float(metrics['sharpe_ratio']), float(buy_hold_metrics['sharpe_ratio'])],
+                        marker_color=['#1f77b4', '#ff7f0e']
+                    ))
+
+                    fig_sharpe.update_layout(
+                        title=f"Sharpe Ratio - {selected_ticker}",
+                        yaxis_title="Sharpe Ratio",
+                        height=350
+                    )
+
+                    # Display charts in 2x2 grid
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        st.plotly_chart(fig_final_value, use_container_width=True)
+                        st.plotly_chart(fig_drawdown, use_container_width=True)
+
+                    with col2:
+                        st.plotly_chart(fig_total_return, use_container_width=True)
+                        st.plotly_chart(fig_sharpe, use_container_width=True)
+
                 except Exception as e:
-                    st.error(f"Error generating chart: {str(e)}")
-                    st.info("Chart functionality is being improved. Check the metrics above for detailed results.")
+                    st.warning(f"Could not run comparison: {str(e)}")
+                    st.info("Comparison requires both strategies to run successfully. Try adjusting your parameters.")
+            
+            # Note: The detailed chart UI is rendered after this block using session state
         
         except Exception as e:
             # Display error with ticker information
@@ -547,6 +523,75 @@ def main():
         
         Ready to start? Configure your settings in the sidebar and run your first backtest!
         """)
+
+    # Persistent Detailed Chart section (works across reruns)
+    st.subheader(f"📈 Performance Chart for {selected_ticker}")
+    if not st.session_state.get('chart_data'):
+        st.info(f"Run a backtest to enable the detailed chart for {selected_ticker}.")
+    else:
+        cols = st.columns(2)
+        with cols[0]:
+            if not st.session_state.get('show_detailed_chart', False):
+                if st.button("Show Detailed Chart", key="btn_show_chart"):
+                    st.session_state['show_detailed_chart'] = True
+                    st.rerun()
+            else:
+                if st.button("Hide Detailed Chart", key="btn_hide_chart"):
+                    st.session_state['show_detailed_chart'] = False
+                    st.rerun()
+
+        # Render chart if toggled on
+        if st.session_state.get('show_detailed_chart', False):
+            try:
+                chart_data = st.session_state.get('chart_data')
+                if chart_data and chart_data['dates'] and chart_data['portfolio_values']:
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=chart_data['dates'],
+                        y=chart_data['portfolio_values'],
+                        mode='lines',
+                        name='Portfolio Value',
+                        line=dict(color='#1f77b4', width=2)
+                    ))
+
+                    initial_value = chart_data['portfolio_values'][0] if chart_data['portfolio_values'] else initial_cash
+                    fig.add_hline(
+                        y=initial_value,
+                        line_dash="dash",
+                        line_color="gray",
+                        annotation_text="Initial Investment",
+                        annotation_position="bottom right"
+                    )
+
+                    fig.update_layout(
+                        title=f"Portfolio Performance Over Time - {selected_ticker}",
+                        xaxis_title="Date",
+                        yaxis_title="Portfolio Value ($)",
+                        height=500,
+                        showlegend=True,
+                        hovermode='x unified'
+                    )
+
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        if len(chart_data['portfolio_values']) > 1:
+                            max_value = max(chart_data['portfolio_values'])
+                            st.metric("Peak Portfolio Value", f"${max_value:,.2f}")
+                    with col2:
+                        if len(chart_data['portfolio_values']) > 1:
+                            min_value = min(chart_data['portfolio_values'])
+                            st.metric("Lowest Portfolio Value", f"${min_value:,.2f}")
+                    with col3:
+                        if len(chart_data['portfolio_values']) > 1:
+                            final_value = chart_data['portfolio_values'][-1]
+                            st.metric("Final Portfolio Value", f"${final_value:,.2f}")
+                else:
+                    st.warning("No portfolio data available for charting. Try running a backtest first.")
+            except Exception as e:
+                st.error(f"Error generating chart: {str(e)}")
+                st.info("Chart functionality is being improved. Check the metrics above for detailed results.")
 
 
 if __name__ == "__main__":

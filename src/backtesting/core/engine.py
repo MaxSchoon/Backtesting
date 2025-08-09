@@ -87,6 +87,12 @@ class BacktestEngine:
         self.performance_metrics['symbol'] = symbol
         
         return self.performance_metrics
+
+    def get_available_strategies(self):
+        return StrategyFactory.get_available_strategies()
+
+    def get_popular_tickers(self):
+        return DataManager.get_popular_tickers()
     
     def _calculate_performance_metrics(self, initial_cash, investment_amount, 
                                      investment_freq, start_date, end_date):

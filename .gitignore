@@ -76,4 +76,6 @@ poetry.lock
 /backtesting/cache/
 /cache/
 
+# Data files
+yfinance_cache.sqlite
 

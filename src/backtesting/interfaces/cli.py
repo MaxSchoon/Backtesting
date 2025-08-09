@@ -6,6 +6,13 @@ Command-line interface for the Investment Strategy Backtester
 import argparse
 import sys
 import os
+from typing import Any
+
+# Optional HTTP cache for yfinance requests
+try:  # noqa: SIM105
+    import requests_cache  # type: ignore[import-not-found]
+except Exception:  # pragma: no cover
+    requests_cache = None  # type: Any
 
 # Add the src directory to the path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -17,6 +24,17 @@ from backtesting.core.data_manager import DataManager
 
 
 def main():
+    # Enable HTTP caching to avoid repeating identical Yahoo Finance requests
+    if requests_cache is not None:
+        try:
+            requests_cache.install_cache(
+                cache_name='yfinance_cache',
+                backend='sqlite',
+                expire_after=3600,
+            )
+        except Exception:
+            pass
+
     parser = argparse.ArgumentParser(
         description='Investment Strategy Backtester - CLI Version',
         formatter_class=argparse.RawDescriptionHelpFormatter,
