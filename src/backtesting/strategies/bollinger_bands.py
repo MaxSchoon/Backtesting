@@ -24,17 +24,28 @@ class BollingerBandsStrategy(BaseStrategy):
         """Invest when price touches or goes below lower band (oversold)"""
         return self.data.close[0] <= self.bb.lines.bot[0]
     
+    def should_sell(self):
+        """Sell when price touches or goes above upper band (overbought)"""
+        return self.data.close[0] >= self.bb.lines.top[0]
+    
     def _execute_strategy(self):
         """Execute Bollinger Bands strategy logic"""
         # Add cash periodically
         cash_added = self.add_cash_periodically(self.params.investment_amount, self.params.investment_freq)
+        
+        # Check sell signals first
+        if self.should_sell():
+            sold_amount = self.sell_position()
+            if sold_amount > 0:
+                current_date = self.data.datetime.date(0)
+                print(f"Bollinger Bands (Overbought): Sold ${sold_amount:.2f} on {current_date}")
         
         # Invest when conditions are met
         if self.should_invest():
             invested_amount = self.invest_accumulated_cash()
             if invested_amount > 0:
                 current_date = self.data.datetime.date(0)
-                print(f"Bollinger Bands: Invested ${invested_amount:.2f} on {current_date}")
+                print(f"Bollinger Bands (Oversold): Invested ${invested_amount:.2f} on {current_date}")
     
     def get_description(self):
         """Get strategy description for UI"""

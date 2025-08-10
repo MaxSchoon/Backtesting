@@ -18,6 +18,10 @@ class DollarCostAveragingStrategy(BaseStrategy):
         """Always invest in DCA strategy"""
         return True
     
+    def should_sell(self):
+        """DCA strategy doesn't sell - it's a buy-and-hold strategy"""
+        return False
+    
     def _execute_strategy(self):
         """Execute DCA strategy logic"""
         # Add cash periodically

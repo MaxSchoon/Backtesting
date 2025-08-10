@@ -12,6 +12,8 @@ class BaseStrategy(bt.Strategy):
         self.portfolio_values = []
         self.dates = []
         self.investment_count = 0
+        self.sell_count = 0
+        self.current_position = 0  # Current number of shares held
         self.setup_indicators()
     
     @abstractmethod
@@ -22,6 +24,11 @@ class BaseStrategy(bt.Strategy):
     @abstractmethod
     def should_invest(self):
         """Determine if we should invest based on strategy logic"""
+        pass
+    
+    @abstractmethod
+    def should_sell(self):
+        """Determine if we should sell based on strategy logic"""
         pass
     
     def add_cash_periodically(self, investment_amount, investment_freq):
@@ -56,8 +63,24 @@ class BaseStrategy(bt.Strategy):
                 invested_amount = size * self.data.close[0]
                 self.accumulated_cash -= invested_amount
                 self.investment_count += 1
-                print(f"BUY: {size} shares at ${self.data.close[0]:.2f} = ${invested_amount:.2f}")
+                self.current_position += size
+                current_date = self.data.datetime.date(0)
+                print(f"BUY: {size} shares at ${self.data.close[0]:.2f} = ${invested_amount:.2f} on {current_date}")
                 return invested_amount
+        return 0
+    
+    def sell_position(self, portion=1.0):
+        """Sell a portion or all of the current position"""
+        if self.current_position > 0:
+            shares_to_sell = int(self.current_position * portion)
+            if shares_to_sell > 0:
+                self.sell(size=shares_to_sell)
+                sold_amount = shares_to_sell * self.data.close[0]
+                self.current_position -= shares_to_sell
+                self.sell_count += 1
+                current_date = self.data.datetime.date(0)
+                print(f"SELL: {shares_to_sell} shares at ${self.data.close[0]:.2f} = ${sold_amount:.2f} on {current_date}")
+                return sold_amount
         return 0
     
     def next(self):
@@ -77,6 +100,10 @@ class BaseStrategy(bt.Strategy):
         # Add cash periodically
         self.add_cash_periodically(self.params.investment_amount, self.params.investment_freq)
         
+        # Check sell signals first (to free up cash if needed)
+        if self.should_sell():
+            self.sell_position()
+        
         # Invest when conditions are met
         if self.should_invest():
             self.invest_accumulated_cash()
@@ -85,3 +112,6 @@ class BaseStrategy(bt.Strategy):
         """Called at the end of the strategy"""
         print(f"Total amount invested: ${self.total_invested:.2f}")
         print(f"Final accumulated cash not invested: ${self.accumulated_cash:.2f}")
+        print(f"Final position: {self.current_position} shares")
+        print(f"Total buy transactions: {self.investment_count}")
+        print(f"Total sell transactions: {self.sell_count}")

@@ -22,17 +22,28 @@ class MovingAverageStrategy(BaseStrategy):
         """Invest when fast MA crosses above slow MA (bullish signal)"""
         return self.crossover > 0  # Fast MA crosses above slow MA
     
+    def should_sell(self):
+        """Sell when fast MA crosses below slow MA (bearish signal)"""
+        return self.crossover < 0  # Fast MA crosses below slow MA
+    
     def _execute_strategy(self):
         """Execute Moving Average strategy logic"""
         # Add cash periodically
         cash_added = self.add_cash_periodically(self.params.investment_amount, self.params.investment_freq)
+        
+        # Check sell signals first
+        if self.should_sell():
+            sold_amount = self.sell_position()
+            if sold_amount > 0:
+                current_date = self.data.datetime.date(0)
+                print(f"MA Crossover (Bearish): Sold ${sold_amount:.2f} on {current_date}")
         
         # Invest when conditions are met
         if self.should_invest():
             invested_amount = self.invest_accumulated_cash()
             if invested_amount > 0:
                 current_date = self.data.datetime.date(0)
-                print(f"MA Crossover: Invested ${invested_amount:.2f} on {current_date}")
+                print(f"MA Crossover (Bullish): Invested ${invested_amount:.2f} on {current_date}")
     
     def get_description(self):
         """Get strategy description for UI"""
