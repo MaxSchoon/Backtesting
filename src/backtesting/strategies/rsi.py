@@ -62,7 +62,7 @@ class RSIStrategy(BaseStrategy):
                     'default': 25.0,
                     'min': 10.0,
                     'max': 40.0,
-                    'description': 'RSI threshold for investing (lower = more aggressive)'
+                    'description': 'RSI threshold for investing (higher = more aggressive)'
                 }
             }
         }
