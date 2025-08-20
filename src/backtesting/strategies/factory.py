@@ -30,7 +30,7 @@ class StrategyFactory:
         if strategy_class == RSIStrategy:
             return {
                 'name': 'RSI Strategy',
-                'description': 'Invests when RSI falls below a threshold, indicating oversold conditions',
+                'description': 'Buys when RSI is oversold (below threshold) and sells when overbought (above threshold)',
                 'detailed_description': """
                 **RSI (Relative Strength Index) Strategy** 📊
                 
@@ -40,9 +40,13 @@ class StrategyFactory:
                 - **BUY Signal**: When RSI falls below the threshold (default: 25), it indicates the asset is oversold and potentially undervalued
                 - **SELL Signal**: When RSI rises above 70, it indicates the asset is overbought and potentially overvalued
                 - **Risk Management**: RSI helps identify extreme market conditions to avoid buying at peaks
+                - **Position Management**: Automatically manages positions by buying low and selling high
                 
                 **Best for**: Volatile markets, swing trading, identifying entry points during market corrections
-                **Parameters**: Adjust the RSI period and threshold to make the strategy more or less aggressive
+                **Parameters**: 
+                - RSI Period: Length of the RSI calculation (default: 14)
+                - RSI Threshold: Level below which to buy (default: 25, lower = more aggressive)
+                - RSI Sell Threshold: Level above which to sell (default: 70, higher = more aggressive)
                 """,
                 'parameters': {
                     'rsi_period': {
@@ -57,7 +61,14 @@ class StrategyFactory:
                         'default': 25.0,
                         'min': 10.0,
                         'max': 40.0,
-                        'description': 'RSI threshold for investing (lower = more aggressive)'
+                        'description': 'RSI threshold for buying (lower = more aggressive)'
+                    },
+                    'rsi_sell_threshold': {
+                        'type': 'float',
+                        'default': 70.0,
+                        'min': 60.0,
+                        'max': 90.0,
+                        'description': 'RSI threshold for selling (higher = more aggressive)'
                     }
                 }
             }

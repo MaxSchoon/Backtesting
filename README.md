@@ -53,6 +53,8 @@ backtesting/
 - **Comprehensive Analytics**: Performance metrics, risk analysis, and strategy comparisons
 - **Real Data**: Yahoo Finance integration with fallback to mock data
 - **Modular Design**: Easy to extend with new strategies
+- **Enhanced Rate Limiting**: Smart retry logic and symbol-specific cooldowns
+- **Date Standardization**: Proper handling across different markets and timezones
 
 ## 📊 Available Strategies
 
@@ -134,6 +136,8 @@ python3 -m pytest tests/
 
 - [Quick Start Guide](docs/QUICK_START.md)
 - [API Documentation](docs/README.md)
+- **[Rate Limiting Guide](docs/YAHOO_FINANCE_RATE_LIMITING.md)** - Comprehensive solutions for Yahoo Finance API limits
+- **[Date Handling Guide](docs/DATE_HANDLING_GUIDE.md)** - Proper date standardization across markets and timezones
 
 ## 🤝 Contributing
 
@@ -152,3 +156,34 @@ This project is licensed under the MIT License.
 - Built with [Backtrader](https://www.backtrader.com/)
 - Data from [Yahoo Finance](https://finance.yahoo.com/)
 - Web interface powered by [Streamlit](https://streamlit.io/)
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+- **Import errors**: Make sure you're in the Backtesting directory
+- **Missing dependencies**: Run `pip install -r requirements.txt`
+- **Data errors**: Some tickers may have limited historical data
+- **Rate limits**: Yahoo Finance may limit requests during high traffic
+
+### Getting Help
+
+- Check the main README.md for detailed documentation
+- Look at example.py for usage examples
+- Use the CLI help: `python3 cli.py --help`
+- **Rate Limiting Issues**: See [Yahoo Finance Rate Limiting Guide](docs/YAHOO_FINANCE_RATE_LIMITING.md) for comprehensive solutions
+- **Date Handling Issues**: See [Date Handling Guide](docs/DATE_HANDLING_GUIDE.md) for market-specific date logic
+
+## 🔄 Recent Updates
+
+### Enhanced Rate Limiting (v2.0)
+- **Smart Retry Logic**: Progressive delays with exponential backoff
+- **Symbol-Specific Cooldowns**: 10-minute cooldowns for rate-limited symbols
+- **Enhanced Error Detection**: Better distinction between rate limits and other errors
+- **Automatic Fallbacks**: Seamless transition to mock data when needed
+
+### Date Standardization (v2.0)
+- **Market-Aware Timezones**: Proper handling for US, European, and Asian markets
+- **Trading Day Calculations**: Automatic exclusion of weekends and holidays
+- **UTC Normalization**: Consistent date processing across all components
+- **Investment Scheduling**: Market-aware cash injection and trading logic

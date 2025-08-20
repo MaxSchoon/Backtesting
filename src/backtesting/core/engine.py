@@ -15,13 +15,47 @@ class BacktestEngine:
         self.portfolio_values = []
         self.dates = []
     
+    def _standardize_input_dates(self, start_date, end_date, symbol):
+        """Standardize input dates for consistent processing"""
+        try:
+            # Convert to pandas datetime
+            start_dt = pd.to_datetime(start_date)
+            end_dt = pd.to_datetime(end_date)
+            
+            # Ensure dates are timezone-naive for consistent handling
+            if start_dt.tz is not None:
+                start_dt = start_dt.tz_localize(None)
+            if end_dt.tz is not None:
+                end_dt = end_dt.tz_localize(None)
+            
+            # Validate date range
+            if start_dt >= end_dt:
+                raise ValueError("Start date must be before end date")
+            
+            # Ensure reasonable date bounds
+            if start_dt < pd.to_datetime('1990-01-01'):
+                raise ValueError("Start date cannot be before 1990")
+            
+            current_time = datetime.now()
+            if end_dt > current_time:
+                end_dt = current_time
+                print(f"⚠️  End date adjusted to current time: {end_dt.strftime('%Y-%m-%d')}")
+            
+            return start_dt, end_dt
+            
+        except Exception as e:
+            raise ValueError(f"Invalid date range: {str(e)}")
+    
     def run_backtest(self, symbol, start_date, end_date, strategy_name, 
                     initial_cash=10000, investment_amount=500, investment_freq='monthly',
-                    strategy_params=None):
+                    strategy_params=None, preserve_results=False):
         """Run a complete backtest"""
         
+        # Standardize and validate input dates
+        start_dt, end_dt = self._standardize_input_dates(start_date, end_date, symbol)
+        
         # Validate inputs
-        DataManager.validate_date_range(start_date, end_date)
+        DataManager.validate_date_range(start_dt, end_dt)
         
         # Get strategy class and parameters
         strategy_class, default_params = StrategyFactory.create_strategy(strategy_name)
@@ -39,11 +73,11 @@ class BacktestEngine:
         # Fetch data with fallback
         data_source = "real"
         try:
-            bt_data, raw_data = DataManager.fetch_data(symbol, start_date, end_date)
+            bt_data, raw_data = DataManager.fetch_data(symbol, start_dt, end_dt)
         except Exception as e:
             # Use mock data as fallback
             from ..utils.mock_data import get_data_with_fallback
-            bt_data, raw_data = get_data_with_fallback(symbol, start_date, end_date)
+            bt_data, raw_data = get_data_with_fallback(symbol, start_dt, end_dt)
             data_source = "mock"
             error_msg = str(e)
             if "Rate limit" in error_msg:
@@ -80,7 +114,7 @@ class BacktestEngine:
         
         # Calculate performance metrics
         self._calculate_performance_metrics(initial_cash, investment_amount, 
-                                         investment_freq, start_date, end_date)
+                                         investment_freq, start_dt, end_dt)
         
         # Add data source information to metrics
         self.performance_metrics['data_source'] = data_source
@@ -128,20 +162,23 @@ class BacktestEngine:
         # Get final portfolio value
         final_value = self.cerebro.broker.getvalue()
         
-        # Calculate total invested
+        # Calculate total invested using standardized dates
         start_dt = pd.to_datetime(start_date)
         end_dt = pd.to_datetime(end_date)
         
+        # Calculate trading days (excluding weekends and holidays)
+        trading_days = self._calculate_trading_days(start_dt, end_dt)
+        
         if investment_freq == 'weekly':
-            periods = ((end_dt - start_dt).days // 7) + 1
+            periods = max(1, trading_days // 7)
         elif investment_freq == 'monthly':
-            periods = (end_dt.year - start_dt.year) * 12 + (end_dt.month - start_dt.month) + 1
+            periods = max(1, (end_dt.year - start_dt.year) * 12 + (end_dt.month - start_dt.month) + 1)
         elif investment_freq == 'quarterly':
-            periods = ((end_dt.year - start_dt.year) * 4 + (end_dt.month - start_dt.month) // 3) + 1
+            periods = max(1, ((end_dt.year - start_dt.year) * 4 + (end_dt.month - start_dt.month) // 3) + 1)
         elif investment_freq == 'yearly':
-            periods = (end_dt.year - start_dt.year) + 1
+            periods = max(1, (end_dt.year - start_dt.year) + 1)
         else:
-            periods = (end_dt.year - start_dt.year) * 12 + (end_dt.month - start_dt.month) + 1
+            periods = max(1, (end_dt.year - start_dt.year) * 12 + (end_dt.month - start_dt.month) + 1)
         
         total_invested = initial_cash + (periods * investment_amount)
         
@@ -198,11 +235,24 @@ class BacktestEngine:
             buy_trades = trade_analysis.get('bought', {}).get('total', 0)
             sell_trades = trade_analysis.get('sold', {}).get('total', 0)
         
+        # Ensure total_trades is the sum of buy and sell trades
         total_trades = buy_trades + sell_trades
-        winning_trades = trade_analysis.get('won', {}).get('total', 0)
-        losing_trades = trade_analysis.get('lost', {}).get('total', 0)
         
-        win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
+        # Get win rate from strategy if available
+        if self.results and len(self.results) > 0:
+            strategy = self.results[0]
+            if hasattr(strategy, 'win_rate_pct'):
+                win_rate = strategy.win_rate_pct
+            else:
+                # Calculate win rate from backtrader analysis
+                winning_trades = trade_analysis.get('won', {}).get('total', 0)
+                losing_trades = trade_analysis.get('lost', {}).get('total', 0)
+                win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
+        else:
+            # Fallback to backtrader analysis
+            winning_trades = trade_analysis.get('won', {}).get('total', 0)
+            losing_trades = trade_analysis.get('lost', {}).get('total', 0)
+            win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
         
         # Annual return calculation - calculate properly accounting for regular investments
         try:
@@ -265,11 +315,23 @@ class BacktestEngine:
             'total_trades': total_trades,
             'buy_trades': buy_trades,
             'sell_trades': sell_trades,
-            'winning_trades': winning_trades,
-            'losing_trades': losing_trades,
+            'winning_trades': winning_trades if 'winning_trades' in locals() else 0,
+            'losing_trades': losing_trades if 'losing_trades' in locals() else 0,
             'win_rate_pct': win_rate,
             'annual_return_pct': annual_return,
         }
+        
+        # Add strategy-specific metrics if available
+        if self.results and len(self.results) > 0:
+            strategy = self.results[0]
+            if hasattr(strategy, 'investment_count'):
+                new_metrics['investment_count'] = strategy.investment_count
+            if hasattr(strategy, 'sell_count'):
+                new_metrics['sell_count'] = strategy.sell_count
+            if hasattr(strategy, 'current_position'):
+                new_metrics['current_position'] = strategy.current_position
+            if hasattr(strategy, 'total_invested'):
+                new_metrics['strategy_total_invested'] = strategy.total_invested
         
         # Preserve existing fields (like data_source and symbol)
         if hasattr(self, 'performance_metrics'):
@@ -289,6 +351,61 @@ class BacktestEngine:
         print(f"Debug - Time Period: {total_years:.2f} years")
         print(f"Debug - Investment Frequency: {investment_freq}")
         print(f"Debug - Start Date: {start_date}, End Date: {end_date}")
+        print(f"Debug - Trading Days: {trading_days}")
+    
+    def _calculate_trading_days(self, start_date, end_date):
+        """Calculate the number of trading days between two dates"""
+        try:
+            # Generate business days (excludes weekends)
+            business_days = pd.bdate_range(start=start_date, end=end_date)
+            
+            # Filter out major holidays (simplified approach)
+            trading_days = 0
+            for date in business_days:
+                if self._is_trading_day(date):
+                    trading_days += 1
+            
+            return trading_days
+            
+        except Exception as e:
+            print(f"Warning: Could not calculate trading days: {e}")
+            # Fallback to simple day count
+            return (end_date - start_date).days
+    
+    def _is_trading_day(self, date):
+        """Check if a given date is a trading day"""
+        try:
+            # Ensure we have a datetime object
+            if isinstance(date, str):
+                date = pd.to_datetime(date)
+            
+            # Check for major US market holidays
+            month = date.month
+            day = date.day
+            
+            # New Year's Day (January 1)
+            if month == 1 and day == 1:
+                return False
+            
+            # Independence Day (July 4)
+            if month == 7 and day == 4:
+                return False
+            
+            # Christmas Day (December 25)
+            if month == 12 and day == 25:
+                return False
+            
+            # Thanksgiving (4th Thursday in November)
+            if month == 11 and date.weekday() == 3:
+                week_of_month = (day - 1) // 7 + 1
+                if week_of_month == 4:
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            print(f"Warning: Could not determine trading day status: {e}")
+            return True  # Assume trading day if we can't determine
     
     def get_performance_metrics(self):
         """Get the calculated performance metrics"""

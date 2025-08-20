@@ -54,6 +54,15 @@ Examples:
 
   # List popular tickers
   python cli.py --list-tickers
+
+  # Check Yahoo Finance API status and rate limiting
+  python cli.py --check-status
+
+  # Clear cache and rate limit cooldowns
+  python cli.py --clear-cache
+
+  # Show cache information
+  python cli.py --cache-info
         """
     )
     
@@ -150,13 +159,32 @@ Examples:
     parser.add_argument(
         '--plot', '-p',
         action='store_true',
-        help='Show performance plot'
+        help='Show performance chart after backtest'
     )
     
     parser.add_argument(
         '--verbose', '-v',
         action='store_true',
-        help='Verbose output'
+        help='Show detailed error information'
+    )
+    
+    # Rate limiting and status commands
+    parser.add_argument(
+        '--check-status',
+        action='store_true',
+        help='Check Yahoo Finance API status and rate limiting'
+    )
+    
+    parser.add_argument(
+        '--clear-cache',
+        action='store_true',
+        help='Clear all cached data'
+    )
+    
+    parser.add_argument(
+        '--cache-info',
+        action='store_true',
+        help='Show information about cached data'
     )
     
     # Information commands
@@ -170,18 +198,6 @@ Examples:
         '--list-tickers',
         action='store_true',
         help='List popular ticker symbols'
-    )
-    
-    parser.add_argument(
-        '--clear-cache',
-        action='store_true',
-        help='Clear all cached data'
-    )
-    
-    parser.add_argument(
-        '--cache-info',
-        action='store_true',
-        help='Show cache information'
     )
     
     args = parser.parse_args()
@@ -219,6 +235,35 @@ Examples:
         print("📦 Cache Information:")
         print("=" * 50)
         print(DataManager.get_cache_info())
+        return
+    
+    if args.check_status:
+        print("🔄 Checking Yahoo Finance API Status...")
+        try:
+            status_info = DataManager.get_rate_limit_status()
+            print(f"📊 {status_info['message']}")
+            
+            if status_info['status'] == 'rate_limited':
+                print("\n🚫 Rate Limited Symbols:")
+                for symbol_info in status_info['rate_limited_symbols']:
+                    print(f"   - {symbol_info['symbol']}: {symbol_info['remaining_cooldown_minutes']}m {symbol_info['remaining_cooldown_seconds']}s remaining")
+                
+                print("\n💡 Recommendations:")
+                for rec in status_info['recommendations']:
+                    print(f"   • {rec}")
+                
+                print("\n🔄 Alternative Tickers (usually more reliable):")
+                alt_tickers = DataManager.get_alternative_tickers()
+                for ticker, desc in alt_tickers.items():
+                    print(f"   • {ticker}: {desc}")
+            else:
+                print("✅ All systems operational!")
+                
+        except Exception as e:
+            print(f"❌ Error checking status: {e}")
+            if args.verbose:
+                import traceback
+                traceback.print_exc()
         return
     
     # Validate required arguments
@@ -305,3 +350,5 @@ Examples:
 
 if __name__ == "__main__":
     main()
+
+

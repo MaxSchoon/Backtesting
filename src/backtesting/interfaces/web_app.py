@@ -17,16 +17,94 @@ import os
 import sys
 import os
 
-# Add the src directory to the path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-src_dir = os.path.join(current_dir, '..', '..')
-sys.path.insert(0, src_dir)
+# Add the src directory to the path - handle multiple possible locations
+try:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    # From interfaces/web_app.py, go up 3 levels to get to project root
+    project_root = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
+    src_dir = os.path.join(project_root, 'src')
+except NameError:
+    # __file__ is not defined, try to find the path another way
+    current_dir = os.getcwd()
+    src_dir = os.path.join(current_dir, 'src')
+    project_root = current_dir
 
-from backtesting.core.engine import BacktestEngine
-from backtesting.core.data_manager import DataManager
+# Also try to find the project root by looking for setup.py or README.md
+if not os.path.exists(os.path.join(project_root, 'setup.py')) and not os.path.exists(os.path.join(project_root, 'README.md')):
+    # We're not in the right place, try to find the project root
+    search_paths = [
+        os.path.join(current_dir, '..', '..', '..'),  # Go up more levels
+        os.path.join(current_dir, '..', '..', '..', '..'),  # Go up even more levels
+        os.path.join(os.getcwd(), '..'),  # Go up from current working directory
+        os.path.join(os.getcwd(), '..', '..'),  # Go up more from current working directory
+    ]
+    
+    for path in search_paths:
+        if os.path.exists(os.path.join(path, 'setup.py')) or os.path.exists(os.path.join(path, 'README.md')):
+            project_root = path
+            src_dir = os.path.join(project_root, 'src')
+            break
+
+# Try multiple import paths
+try:
+    # First try: direct import from current location
+    print(f"🔍 Trying direct import from current location: {current_dir}")
+    from backtesting.core.engine import BacktestEngine
+    from backtesting.core.data_manager import DataManager
+    print("✅ Direct import successful")
+    print(f"DataManager type: {type(DataManager)}")
+except ImportError as e1:
+    print(f"❌ Direct import failed: {e1}")
+    try:
+        # Second try: add src to path and import
+        print(f"🔍 Trying import with src path: {src_dir}")
+        sys.path.insert(0, src_dir)
+        from backtesting.core.engine import BacktestEngine
+        from backtesting.core.data_manager import DataManager
+        print("✅ Src path import successful")
+        print(f"DataManager type: {type(DataManager)}")
+    except ImportError as e2:
+        print(f"❌ Src path import failed: {e2}")
+        try:
+            # Third try: add project root to path and import
+            print(f"🔍 Trying import with project root path: {project_root}")
+            sys.path.insert(0, project_root)
+            from src.backtesting.core.engine import BacktestEngine
+            from src.backtesting.core.data_manager import DataManager
+            print("✅ Project root import successful")
+            print(f"DataManager type: {type(DataManager)}")
+        except ImportError as e3:
+            print(f"❌ All import attempts failed:")
+            print(f"   Direct: {e1}")
+            print(f"   Src path: {e2}")
+            print(f"   Project root: {e3}")
+            st.error(f"❌ Failed to import required modules: {e3}")
+            st.error("Please ensure you're running this from the correct directory.")
+            st.stop()
+
+# Verify that DataManager is actually defined
+if 'DataManager' not in globals():
+    print("❌ CRITICAL: DataManager is not in globals after import attempts!")
+    print(f"Available globals: {[k for k in globals().keys() if not k.startswith('_')]}")
+    st.error("❌ DataManager import failed completely. This is a critical error.")
+    st.stop()
+else:
+    print(f"✅ DataManager is available in globals: {type(globals()['DataManager'])}")
 
 
 def main():
+    # Import DataManager here to ensure it's available in the function scope
+    try:
+        from backtesting.core.data_manager import DataManager
+    except ImportError:
+        try:
+            import sys
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+            from backtesting.core.data_manager import DataManager
+        except ImportError:
+            st.error("❌ Failed to import DataManager. Please ensure you're running this from the correct directory.")
+            st.stop()
+    
     st.set_page_config(
         page_title="Investment Strategy Backtester",
         page_icon="📈",
@@ -504,6 +582,11 @@ def main():
                 st.info(f"Compare this strategy with a simple buy-and-hold approach for {selected_ticker}")
                 try:
                     with st.spinner("Running comparison..."):
+                        # Store the main backtest results before running comparison
+                        main_results = engine.results
+                        main_metrics = metrics.copy()
+                        
+                        # Run comparison backtest
                         buy_hold_metrics = engine.run_backtest(
                             symbol=selected_ticker,
                             start_date=start_date.strftime('%Y-%m-%d'),
@@ -513,6 +596,13 @@ def main():
                             investment_amount=investment_amount,
                             investment_freq=investment_freq
                         )
+                        
+                        # Restore the main backtest results
+                        engine.results = main_results
+                        engine.performance_metrics = main_metrics
+                        
+                        # Update the metrics variable to show main strategy results
+                        metrics = main_metrics
 
                     # Create 2x2 grid of comparison charts
                     # 1. Final Value Comparison (in dollars)
@@ -618,6 +708,37 @@ def main():
             - For demonstration purposes, try using popular tickers like AAPL, MSFT, or SPY
             - If you see "Demo Mode" warnings, the app is using simulated data due to API limitations
             """)
+            
+            # Add rate limiting specific help
+            try:
+                from backtesting.core.data_manager import DataManager
+                status_info = DataManager.get_rate_limit_status()
+                if status_info['status'] == 'rate_limited':
+                    st.warning("🚫 Yahoo Finance Rate Limiting Detected!")
+                    st.markdown("""
+                    **Current Rate Limited Symbols:**
+                    """)
+                    for symbol_info in status_info['rate_limited_symbols']:
+                        st.markdown(f"- **{symbol_info['symbol']}**: {symbol_info['remaining_cooldown_minutes']}m {symbol_info['remaining_cooldown_seconds']}s remaining")
+                    
+                    st.markdown("""
+                    **💡 Recommendations:**
+                    - Wait for the cooldown period to expire
+                    - Try these alternative tickers (usually more reliable):
+                    """)
+                    
+                    alt_tickers = DataManager.get_alternative_tickers()
+                    for ticker, desc in alt_tickers.items():
+                        st.markdown(f"- **{ticker}**: {desc}")
+                    
+                    st.markdown("""
+                    **🔧 Technical Solutions:**
+                    - Clear your browser cache and try again
+                    - Use shorter date ranges to reduce data volume
+                    - Try again in a few minutes
+                    """)
+            except Exception:
+                pass  # Don't break the app if status check fails
     
     else:
         # Show welcome message and instructions
